@@ -139,7 +139,7 @@ class BaseCursor(object):
     def execute(self, query, args=None):
 
         """Execute a query.
-        
+
         query -- string, query to execute on server
         args -- optional sequence or mapping, parameters to use with query.
 
@@ -152,12 +152,16 @@ class BaseCursor(object):
         """
         del self.messages[:]
         db = self._get_db()
-        charset = db.character_set_name()
         if isinstance(query, unicode):
-            query = query.encode(charset)
+            query = query.encode(db.unicode_literal.charset)
         if args is not None:
-            query = query % db.literal(args)
+            if isinstance(args, dict):
+                query = query % dict((key, db.literal(item))
+                                     for key, item in args.iteritems())
+            else:
+                query = query % tuple([db.literal(item) for item in args])
         try:
+            r = None
             r = self._query(query)
         except TypeError, m:
             if m.args[0] in ("not enough arguments for format string",
@@ -167,6 +171,8 @@ class BaseCursor(object):
             else:
                 self.messages.append((TypeError, m))
                 self.errorhandler(self, TypeError, m)
+        except (SystemExit, KeyboardInterrupt):
+            raise
         except:
             exc, value, tb = sys.exc_info()
             del tb
